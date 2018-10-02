@@ -30,6 +30,12 @@ String[] split;
 StringList highRange = new StringList();
 StringList lowRange = new StringList();
 
+public enum ModelTypes {
+  C_SVC,
+  ONE_CLASS;
+}
+ModelTypes modelType; //Added to specify between diff model types
+
 // setup the window
 void setup() {
   size(300, 300);
@@ -83,13 +89,20 @@ void controlEvent(ControlEvent theEvent) {
       rect(10, 100, 200, 45);
       text.setText("Please insert a model file path");
       return;
-    } else if (!split[1].equals("c_svc")) {
+    } else if (!split[1].equals("c_svc") && !split[1].equals("one_class")) {
       fill(0, 0, 0);
       stroke (0); 
       rect(10, 100, 200, 45);
-      text.setText("Please insert a c_svc model");
+      text.setText("Please insert a c_svc or one_class model");
       return;
     } else {
+      
+      if (split[1].equals("c_svc")){
+         modelType = ModelTypes.C_SVC; 
+      } else { //one_class
+        modelType = ModelTypes.ONE_CLASS;
+      }
+      
       split = split(modelData[1], " ");
 
       if (!(split[1].equals("polynomial")||split[1].equals("linear")||split[1].equals("rbf")||split[1].equals("sigmoid"))) {
@@ -120,7 +133,7 @@ void controlEvent(ControlEvent theEvent) {
 
             split = split(modelData[i], " ");
             // if the section with SV's is already reached start to save the SV's and Yalphas
-            if (sv) {
+            if (sv && modelType == ModelTypes.C_SVC) {
 
               int x = 0;
               int start = i;
@@ -186,6 +199,72 @@ void controlEvent(ControlEvent theEvent) {
               output.println("#define VEC_DIM " + str(nr_sens));
               break;
               // as long as the SV section is not reached read out the other data
+            }  else if (modelType = ModelTypes.ONE_CLASS) {
+              int x = 0;
+              int start = i;
+
+              while (x < nr_sv.length) {
+                String[] yalpha = new String[nr_sv.length - 1];
+                String[] svs = new String[nr_sv[x]];
+
+                for (int r = 0; r< yalpha.length; r++) {
+                  yalpha[r] = "";
+                }
+                for (int r = 0; r< svs.length; r++) {
+                  svs[r] = "";
+                }
+                for (int y = start; y < start + nr_sv[x]; y++) {
+                  split = split(modelData[y], " ");                  
+                  int nr = 1;
+
+                  for (int j = 0; j < yalpha.length; j++) {
+                    if (j == yalpha.length-1 && y == start + nr_sv[x]-1) {
+                      yalpha[j] = yalpha[j] +split[j];
+                    } else {
+                      yalpha[j] = yalpha[j] +split[j] + ", ";
+                    }
+                  }
+                  for (int j = yalpha.length; j < split.length-1; j++) {
+                    String[] part = split(split[j], ":");
+                    if (j == split.length-2 && y == start + nr_sv[x]-1) {
+                      while (nr < int (part[0]) ) {
+                        svs[y-start] = svs[y-start]  + "0";
+                        nr++;
+                      }
+                      svs[y-start] = svs[y-start] + split(split[j], ":")[part.length -1];
+                      nr++;
+                    } else {
+                      while (nr < int (part[0]) ) {
+                        svs[y-start] = svs[y-start]  + "0" + ", ";
+                        nr++;
+                      }
+                      svs[y-start] = svs[y-start] + split(split[j], ":")[part.length -1] + ", " ;
+                      nr++;
+                    }
+                  }
+                  if (nr > nr_sens) {
+                    nr_sens = nr-1;
+                  }
+                }
+                model = model + "\n const PROGMEM float yalpha"+str(x+1)+"["+str(nr_sv[x])+" * (NR_CLASS-1)] = {";
+                for (int t = 0; t < yalpha.length; t++) {
+                  model = model + yalpha[t];
+                }
+                model = model + "}; \n";
+                model = model + "\n const PROGMEM float sv"+str(x+1)+"["+str(nr_sv[x])+" * VEC_DIM] = {";
+                for (int p = 0; p < svs.length; p++) {
+
+                  model = model + svs[p];
+                }
+                model = model + "}; \n";
+
+                start = start + nr_sv[x];
+                x++;
+              } 
+              output.println("#define VEC_DIM " + str(nr_sens));
+              break;
+              // as long as the SV section is not reached read out the other data
+            
             } else {
               if (split.length > 2) {
                 if (split[0].equals("rho")) {
@@ -369,4 +448,3 @@ void controlEvent(ControlEvent theEvent) {
     exit();
   }
 }  
-
